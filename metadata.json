@@ -1,0 +1,6 @@
+{
+  "name": "Toán 8 - Thầy giáo Hải AI",
+  "description": "Ứng dụng học tập tương tác môn Toán lớp 8 cùng Thầy giáo Hải AI, hướng dẫn chi tiết từng bước giải toán đại số và hình học theo sách giáo khoa Kết nối tri thức.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
