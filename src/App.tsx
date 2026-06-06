@@ -19,7 +19,8 @@ import {
   User,
   RefreshCw,
   Send,
-  Grid
+  Grid,
+  GraduationCap
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -124,7 +125,7 @@ export default function App() {
   // Curriculum outline states
   const [activeChapterId, setActiveChapterId] = useState<string>('ch2');
   const [activeLessonId, setActiveLessonId] = useState<string>('hdt-binh-phuong');
-  const [activeTab, setActiveTab] = useState<'theory' | 'quiz' | 'lab'>('theory');
+  const [activeTab, setActiveTab] = useState<'theory' | 'quiz' | 'lab' | 'guide'>('theory');
 
   // Track completed lesson IDs with LocalStorage persistence
   const [completedLessonIds, setCompletedLessonIds] = useState<string[]>(() => {
@@ -1035,6 +1036,14 @@ Em muốn thầy hướng dẫn chi tiết từng bước giải thích tại sa
                   }`}
                 >
                   <Sparkles className="w-3.5 h-3.5 fill-current" /> Phòng Thí Nghiệm
+                </button>
+                <button
+                  onClick={() => setActiveTab('guide')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 whitespace-nowrap shrink-0 ${
+                    activeTab === 'guide' ? 'bg-amber-400 text-black shadow-md' : 'text-white/60 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <GraduationCap className="w-3.5 h-3.5" /> Thầy Hải hướng dẫn
                 </button>
               </div>
             </div>
@@ -2674,6 +2683,138 @@ Em muốn thầy hướng dẫn chi tiết từng bước giải thích tại sa
                       </div>
                     </div>
                   )}
+
+                </div>
+              )}
+
+              {activeTab === 'guide' && (
+                <div className="space-y-6 animate-fade-in text-left">
+                  
+                  {/* Hero card Thầy Hải */}
+                  <div className="bg-gradient-to-r from-amber-500/10 to-teal-500/10 border border-amber-400/20 rounded-2xl p-5 flex flex-col md:flex-row items-center gap-4 shadow-xl">
+                    <div className="w-14 h-14 rounded-full bg-amber-400 text-teal-950 flex items-center justify-center font-extrabold text-xl font-sans shrink-0 border-2 border-amber-300 shadow-inner">
+                      TH
+                    </div>
+                    <div className="space-y-1 text-center md:text-left">
+                      <h3 className="font-serif italic text-base text-amber-300 font-bold flex items-center justify-center md:justify-start gap-1.5 font-sans">
+                        Lớp học tương tác • Thầy giáo Hải AI hướng dẫn
+                      </h3>
+                      <p className="text-xs text-white/80 leading-relaxed">
+                        Thầy đã chuẩn bị tóm tắt rút gọn, các mẹo vượt bẫy phòng thi và những dạng bài quan trọng cho bài <strong className="text-amber-300">"{currentLesson.title}"</strong>. Hãy ôn tập thật kỹ và click các nút hỏi nhanh bên dưới để trò chuyện trực tiếp cùng Thầy nhé!
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Two-column layout: Core Guideline on left, interactive prompt actions on right */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    
+                    {/* Left Column: Chalkboard Handbook */}
+                    <div className="bg-[#15151b] border border-white/10 rounded-2xl p-5 space-y-4">
+                      <h4 className="text-xs uppercase font-bold text-amber-400 tracking-wider flex items-center gap-1.5 border-b border-white/5 pb-2">
+                        <BookOpen className="w-3.5 h-3.5" /> Sổ tay sư phạm Thầy Hải Toán 8
+                      </h4>
+
+                      <div className="space-y-3.5">
+                        <div>
+                          <span className="text-[10px] font-bold text-teal-400 uppercase tracking-wider block mb-1 font-sans">Mục tiêu bài này</span>
+                          <p className="text-xs text-white/70 leading-relaxed font-sans">
+                            {currentLesson.objective}
+                          </p>
+                        </div>
+
+                        {currentLesson.theory && currentLesson.theory.length > 0 && (
+                          <div>
+                            <span className="text-[10px] font-bold text-teal-400 uppercase tracking-wider block mb-1.5 font-sans">Lý thuyết cốt lõi</span>
+                            <ul className="space-y-1.5 text-xs text-white/80 font-sans pl-1.5 border-l-2 border-white/5">
+                              {currentLesson.theory.slice(0, 3).map((line, lid) => (
+                                <li key={lid} className="flex gap-1.5">
+                                  <span className="text-amber-400 font-mono">▸</span>
+                                  <span className="flex-grow">{line}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        
+                        {currentLesson.examples && currentLesson.examples.length > 0 && (
+                          <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block mb-1 font-sans">Ví dụ minh họa tiêu biểu:</span>
+                            <div className="text-xs text-white/90">
+                              <MathRenderer text={currentLesson.examples[0].problem} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right Column: Tips, Common Mistakes, and Ask-Prompt-Bubbles */}
+                    <div className="space-y-5">
+                      
+                      {/* Tips & Pitfalls Card */}
+                      <div className="bg-teal-950/10 border border-teal-500/20 rounded-2xl p-5 space-y-3">
+                        <h4 className="text-xs uppercase font-bold text-teal-400 tracking-wider flex items-center gap-1.5 border-b border-teal-500/10 pb-2">
+                          <AlertCircle className="w-3.5 h-3.5 text-teal-400" /> Bẫy thi & Mẹo hay Thầy khuyên
+                        </h4>
+                        
+                        <p className="text-xs text-teal-100/90 leading-relaxed font-sans italic">
+                          {activeChapterId === 'ch1' && "Đừng nhầm lẫn giữa đơn thức và đa thức! Biểu thức có phép cộng/trừ ở giữa là đa thức rồi. Khi thực hiện phép chia đa thức cho đơn thức, nhớ chia từng hạng tử một nhé."}
+                          {activeChapterId === 'ch2' && "Học sinh cực kỳ hay sai dấu hằng đẳng thức số 2, viết nhầm thành -B² ở cuối thay vì +B². Nhớ là bình phương của mọi hạng tử đơn lẻ luôn luôn mang dấu cộng."}
+                          {activeChapterId === 'ch3' && "Cách nhanh nhất để chứng minh hình thang cân là tìm 2 góc kề 1 đáy bằng nhau, hoặc 2 đường chéo bằng nhau. Tránh nhầm lẫn 2 cạnh bên bằng nhau vì nó chưa chắc đã là hình thang cân (có thể là hình bình hành)."}
+                          {activeChapterId === 'ch4' && "Định lí Thalès chỉ áp dụng khi có đường thẳng song song! Hãy lập tỉ lệ thức thật tỉ mỉ: đoạn đỉnh/đoạn đáy tương ứng. Sai một đỉnh là sai toàn bộ bài chứng minh."}
+                          {activeChapterId === 'ch5' && "Dữ liệu rời rạc (như đếm số bàn ghế) dùng biểu đồ cột đơn/kép. Dữ liệu liên tục (thời gian, cân nặng) dùng biểu đồ đoạn thẳng là tối ưu nhất. Chọn sai biểu đồ sẽ bị trừ phân nửa điểm đồ thị."}
+                          {activeChapterId === 'ch6' && "Khi rút gọn phân thức, bước đầu tiên và tối quan trọng là tìm điều kiện xác định (cho mẫu thức khác 0). Không có điều kiện xác định thì mọi bước biến đổi sau đó đều vô nghĩa!"}
+                          {activeChapterId === 'ch7' && "Một lỗi kinh điển là quên đổi dấu khi chuyển vế. Hãy nhẩm câu thành ngữ: 'Chuyển vế - đổi dấu; giữ nguyên vế - giữ nguyên dấu'."}
+                          {activeChapterId === 'ch8' && "Xác suất thực nghiệm phụ thuộc vào việc thực hiện phép thử nhiều hay ít. Càng thử nhiều thì xác suất thực nghiệm càng tiến sát tới xác suất lý thuyết lý tưởng."}
+                          {activeChapterId === 'ch9' && "Khi viết hai tam giác đồng dạng, thứ tự các đỉnh tương ứng tuyệt đối không được viết bừa bãi. Phải tương ứng đỉnh góc bằng nhau, tỉ số cạnh mới không bị lệch."}
+                          {activeChapterId === 'ch10' && "Hãy phân biệt rõ rệt chiều cao của hình chóp h (khoảng cách từ đỉnh tới tâm đáy) với trung đoạn d (chiều cao của tam giác mặt bên). Công thức diện tích xung quanh dùng trung đoạn d, thể tích dùng h."}
+                        </p>
+                      </div>
+
+                      {/* Interactive Prompt Bubbles */}
+                      <div className="bg-amber-400/5 border border-amber-400/10 rounded-2xl p-5 space-y-3.5">
+                        <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider block font-sans">
+                          Để hiểu sâu hơn, hãy nhờ Thầy Hải hướng dẫn trực tuyến:
+                        </span>
+                        
+                        <div className="flex flex-col gap-2.5">
+                          <button
+                            onClick={() => askPreconfiguredQuestion(`Thầy Hải ơi! Thầy giảng giải phân tích sâu rộng cho em lý thuyết bài "${currentLesson.title}" kèm theo một vài ví dụ nâng cao điểm 9-10 của phần này với ạ!`)}
+                            className="w-full text-left bg-white/5 hover:bg-amber-400/10 border border-white/5 hover:border-amber-400/30 p-3 rounded-xl transition-all flex items-start gap-2.5 group active:scale-[0.98]"
+                          >
+                            <span className="text-amber-400 group-hover:scale-110 transition shrink-0">💡</span>
+                            <div className="space-y-0.5">
+                              <p className="text-xs font-bold text-white group-hover:text-amber-300 transition font-sans">Ví dụ mở rộng nâng cao</p>
+                              <p className="text-[10px] text-white/50 font-sans">Thầy Hải hướng dẫn bài toán mức độ khá giỏi, vận dụng cao.</p>
+                            </div>
+                          </button>
+
+                          <button
+                            onClick={() => askPreconfiguredQuestion(`Thầy Hải ơi! Thầy hãy chỉ cho em mẹo nhận diện bẫy phòng thi, các sai sót học sinh lớp 8 hay gặp nhất khi làm bài kiểm tra phần "${currentLesson.title}" để em tránh bị trừ điểm với ạ!`)}
+                            className="w-full text-left bg-white/5 hover:bg-amber-400/10 border border-white/5 hover:border-amber-400/30 p-3 rounded-xl transition-all flex items-start gap-2.5 group active:scale-[0.98]"
+                          >
+                            <span className="text-amber-400 group-hover:scale-110 transition shrink-0">⚠️</span>
+                            <div className="space-y-0.5">
+                              <p className="text-xs font-bold text-white group-hover:text-amber-300 transition font-sans">Bẫy điểm thi cần tránh</p>
+                              <p className="text-[10px] text-white/50 font-sans">Những chỗ hay nhầm lẫn tai hại làm mất điểm oan!</p>
+                            </div>
+                          </button>
+
+                          <button
+                            onClick={() => askPreconfiguredQuestion(`Thầy Hải ơi! Trong cuộc sống hay các ngành khoa học thực tế, bài học "${currentLesson.title}" được ứng dụng như thế nào vậy Thầy? Thầy cho em một ví dụ thực tế trực quan sinh động với ạ!`)}
+                            className="w-full text-left bg-white/5 hover:bg-amber-400/10 border border-white/5 hover:border-amber-400/30 p-3 rounded-xl transition-all flex items-start gap-2.5 group active:scale-[0.98]"
+                          >
+                            <span className="text-amber-400 group-hover:scale-110 transition shrink-0">🌍</span>
+                            <div className="space-y-0.5">
+                              <p className="text-xs font-bold text-white group-hover:text-amber-300 transition font-sans">Ứng dụng thực tiễn cuộc sống</p>
+                              <p className="text-[10px] text-white/50 font-sans">Giải đáp câu hỏi "Học phần này để làm gì?" bằng câu chuyện thực tiễn.</p>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+
+                    </div>
+
+                  </div>
 
                 </div>
               )}
