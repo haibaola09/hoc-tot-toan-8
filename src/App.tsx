@@ -39,6 +39,7 @@ import {
 import { CURRICULUM } from './data';
 import { ChatMessage, Question, Lesson } from './types';
 import { MathRenderer } from './components/MathRenderer';
+import { getQuizzesForLesson } from './quizGenerator';
 
 interface MathKey {
   display: string;
@@ -150,6 +151,12 @@ export default function App() {
   // Interactive Quiz assessment state
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
   const [quizResults, setQuizResults] = useState<Record<string, { isCorrect: boolean; showDetail: boolean }>>({});
+  const [activeQuizFilter, setActiveQuizFilter] = useState<'all' | 'easy' | 'medium' | 'hard' | 'extreme'>('all');
+
+  // Reset quiz filter when switching lessons
+  useEffect(() => {
+    setActiveQuizFilter('all');
+  }, [activeLessonId]);
 
   // Chat with Thầy giáo Hải
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -171,6 +178,20 @@ export default function App() {
   // Cartesian linear grapher states
   const [slopeA, setSlopeA] = useState<number>(2);
   const [yInterceptB, setYInterceptB] = useState<number>(-1);
+
+  // Probabilistic simulator states (Chương VIII - Mở đầu xác suất)
+  const [probTab, setProbTab] = useState<'coin' | 'dice'>('coin');
+  const [coinHeadsCount, setCoinHeadsCount] = useState<number>(0);
+  const [coinTailsCount, setCoinTailsCount] = useState<number>(0);
+  const [coinFlips, setCoinFlips] = useState<('Sấp' | 'Ngửa')[]>([]);
+  const [isFlippingCoin, setIsFlippingCoin] = useState<boolean>(false);
+  const [latestCoinResult, setLatestCoinResult] = useState<'Sấp' | 'Ngửa' | null>(null);
+
+  const [diceCounts, setDiceCounts] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]); // Index 1 to 6
+  const [diceRolls, setDiceRolls] = useState<number[]>([]);
+  const [latestDiceResult, setLatestDiceResult] = useState<number | null>(null);
+  const [isRollingDice, setIsRollingDice] = useState<boolean>(false);
+  const [diceCondition, setDiceCondition] = useState<'any' | 'odd' | 'geq3' | 'div3'>('any');
 
   // Interactive Recharts statistics data states
   const [surveyItems, setSurveyItems] = useState([
@@ -219,6 +240,18 @@ export default function App() {
   // Find currently active chapter & lesson data
   const currentChapter = CURRICULUM.find(c => c.id === activeChapterId) || CURRICULUM[0];
   const currentLesson = currentChapter.lessons.find(l => l.id === activeLessonId) || currentChapter.lessons[0];
+  const currentLessonQuizzes = getQuizzesForLesson(currentLesson.id);
+
+  const filteredQuizzes = currentLessonQuizzes.filter(q => {
+    const parts = q.id.split('-q');
+    const idx = parseInt(parts[parts.length - 1] || '1', 10);
+    if (activeQuizFilter === 'all') return true;
+    if (activeQuizFilter === 'easy') return idx >= 1 && idx <= 5;
+    if (activeQuizFilter === 'medium') return idx >= 6 && idx <= 12;
+    if (activeQuizFilter === 'hard') return idx >= 13 && idx <= 17;
+    if (activeQuizFilter === 'extreme') return idx >= 18 && idx <= 20;
+    return true;
+  });
 
   // Compute progress parameters
   const totalLessonsCount = CURRICULUM.reduce((acc, chap) => acc + chap.lessons.length, 0);
@@ -230,8 +263,19 @@ export default function App() {
     const chapLessons = chapter.lessons;
     const completedInChap = chapLessons.filter(l => completedLessonIds.includes(l.id)).length;
     const percent = Math.round((completedInChap / chapLessons.length) * 100);
+    
+    // Extract short code such as "Ch. I", "Ch. II" from "Chương I: Đa Thức" to prevent overlapping labels
+    let shortName = '';
+    if (chapter.title.includes(':')) {
+      const parts = chapter.title.split(':');
+      shortName = parts[0].replace('Chương', 'Ch.').trim();
+    } else {
+      shortName = chapter.title.substring(0, 8);
+    }
+
     return {
       name: chapter.title.includes(':') ? chapter.title.split(':')[1].trim() : chapter.title,
+      shortName: shortName,
       'Sĩ số bài đã học': completedInChap,
       'Tổng học phần': chapLessons.length,
       'Phần trăm': percent
@@ -240,10 +284,11 @@ export default function App() {
 
   // Auto mark lesson as completed when all quizzes of the current lesson are answered correctly!
   useEffect(() => {
-    if (!currentLesson || !currentLesson.quizzes || currentLesson.quizzes.length === 0) return;
+    const currentLessonQuizzes = getQuizzesForLesson(currentLesson.id);
+    if (!currentLessonQuizzes || currentLessonQuizzes.length === 0) return;
     
     // Check if every quiz of this lesson has a correct result in quizResults
-    const allCorrect = currentLesson.quizzes.every(q => quizResults[q.id]?.isCorrect === true);
+    const allCorrect = currentLessonQuizzes.every(q => quizResults[q.id]?.isCorrect === true);
     if (allCorrect && !completedLessonIds.includes(currentLesson.id)) {
       setCompletedLessonIds(prev => {
         const next = prev.includes(currentLesson.id) ? prev : [...prev, currentLesson.id];
@@ -545,6 +590,82 @@ Em muốn thầy hướng dẫn chi tiết từng bước giải thích tại sa
   const pyramidSlant = Math.sqrt(pyramidHeight * pyramidHeight + (pyramidBase / 2) * (pyramidBase / 2)).toFixed(2);
   const pyramidS_xq = (2 * pyramidBase * parseFloat(pyramidSlant)).toFixed(2); // S_xq = 4 * (1/2 * a * d) = 2 * a * d
 
+  // Probability lab simulation helpers
+  const handleFlipCoin = (count: number) => {
+    if (isFlippingCoin) return;
+    
+    if (count === 1) {
+      setIsFlippingCoin(true);
+      setLatestCoinResult(null);
+      setTimeout(() => {
+        const result = Math.random() < 0.5 ? 'Sấp' : 'Ngửa';
+        setLatestCoinResult(result);
+        setCoinFlips(prev => [result, ...prev.slice(0, 49)]); // keep last 50
+        if (result === 'Sấp') {
+          setCoinHeadsCount(prev => prev + 1);
+        } else {
+          setCoinTailsCount(prev => prev + 1);
+        }
+        setIsFlippingCoin(false);
+      }, 500);
+    } else {
+      let headsDelta = 0;
+      let tailsDelta = 0;
+      const batchList: ('Sấp' | 'Ngửa')[] = [];
+      for (let i = 0; i < count; i++) {
+        const res = Math.random() < 0.5 ? 'Sấp' : 'Ngửa';
+        batchList.push(res);
+        if (res === 'Sấp') headsDelta++;
+        else tailsDelta++;
+      }
+      setCoinFlips(prev => [...batchList, ...prev].slice(0, 50));
+      setCoinHeadsCount(prev => prev + headsDelta);
+      setCoinTailsCount(prev => prev + tailsDelta);
+      setLatestCoinResult(batchList[0]);
+    }
+  };
+
+  const handleRollDice = (count: number) => {
+    if (isRollingDice) return;
+
+    if (count === 1) {
+      setIsRollingDice(true);
+      setLatestDiceResult(null);
+      setTimeout(() => {
+        const result = Math.floor(Math.random() * 6) + 1;
+        setLatestDiceResult(result);
+        setDiceRolls(prev => [result, ...prev.slice(0, 49)]); // keep last 50
+        setDiceCounts(prev => {
+          const next = [...prev];
+          next[result] = next[result] + 1;
+          return next;
+        });
+        setIsRollingDice(false);
+      }, 500);
+    } else {
+      const batchList: number[] = [];
+      const countsDelta = [0, 0, 0, 0, 0, 0, 0];
+      for (let i = 0; i < count; i++) {
+        const res = Math.floor(Math.random() * 6) + 1;
+        batchList.push(res);
+        countsDelta[res]++;
+      }
+      setDiceRolls(prev => [...batchList, ...prev].slice(0, 50));
+      setDiceCounts(prev => prev.map((val, idx) => val + countsDelta[idx]));
+      setLatestDiceResult(batchList[0]);
+    }
+  };
+
+  const handleResetProb = () => {
+    setCoinHeadsCount(0);
+    setCoinTailsCount(0);
+    setCoinFlips([]);
+    setLatestCoinResult(null);
+    setDiceCounts([0, 0, 0, 0, 0, 0, 0]);
+    setDiceRolls([]);
+    setLatestDiceResult(null);
+  };
+
   // Inline SVG graph plotter components
   const renderSVGGraph = () => {
     const width = 360;
@@ -581,8 +702,11 @@ Em muốn thầy hướng dẫn chi tiết từng bước giải thích tại sa
     }
 
     return (
-      <div className="relative bg-[#111116] border border-white/10 rounded-xl p-3.5 flex flex-col items-center">
-        <svg width={width} height={height} className="overflow-visible border border-white/5 rounded-lg bg-black/40">
+      <div className="relative w-full max-w-[360px] mx-auto bg-[#111116] border border-white/10 rounded-xl p-3.5 flex flex-col items-center">
+        <svg 
+          viewBox={`0 0 ${width} ${height}`} 
+          className="w-full h-auto overflow-hidden border border-white/5 rounded-lg bg-black/40"
+        >
           {/* Grids */}
           {grids}
 
@@ -839,11 +963,15 @@ Em muốn thầy hướng dẫn chi tiết từng bước giải thích tại sa
               {/* Right col: Recharts visualizer by chapters */}
               <div className="md:col-span-7 h-[140px] w-full bg-black/40 border border-white/5 rounded-xl p-2 font-sans select-none overflow-hidden">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={progressByChapterData} margin={{ top: 10, right: 10, bottom: 0, left: -25 }}>
+                  <BarChart data={progressByChapterData} margin={{ top: 10, right: 10, bottom: 5, left: -25 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
-                    <XAxis dataKey="name" stroke="rgba(255,255,255,0.35)" fontSize={7} interval={0} tickFormatter={(name) => name.replace('Chương', 'Ch.')} />
+                    <XAxis dataKey="shortName" stroke="rgba(255,255,255,0.35)" fontSize={8} interval={0} />
                     <YAxis stroke="rgba(255,255,255,0.35)" fontSize={8} allowDecimals={false} />
                     <RechartsTooltip 
+                      labelFormatter={(label) => {
+                        const item = progressByChapterData.find(d => d.shortName === label);
+                        return item ? `${item.shortName}: ${item.name}` : label;
+                      }}
                       contentStyle={{ backgroundColor: '#0d0d12', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontFamily: 'sans-serif' }}
                       labelStyle={{ color: '#f59e0b', fontWeight: 'extrabold', fontSize: '9px' }}
                       itemStyle={{ color: '#fff', fontSize: '9px', padding: 0 }}
@@ -883,10 +1011,10 @@ Em muốn thầy hướng dẫn chi tiết từng bước giải thích tại sa
                   {currentLesson.title}
                 </h2>
               </div>
-              <div className="flex bg-black/30 p-1 rounded-xl border border-white/10">
+              <div className="flex bg-black/30 p-1 rounded-xl border border-white/10 overflow-x-auto max-w-full scrollbar-none flex-nowrap shrink-0">
                 <button
                   onClick={() => setActiveTab('theory')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
                     activeTab === 'theory' ? 'bg-amber-400 text-black shadow-md' : 'text-white/60 hover:text-white hover:bg-white/5'
                   }`}
                 >
@@ -894,7 +1022,7 @@ Em muốn thầy hướng dẫn chi tiết từng bước giải thích tại sa
                 </button>
                 <button
                   onClick={() => setActiveTab('quiz')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
                     activeTab === 'quiz' ? 'bg-amber-400 text-black shadow-md' : 'text-white/60 hover:text-white hover:bg-white/5'
                   }`}
                 >
@@ -902,7 +1030,7 @@ Em muốn thầy hướng dẫn chi tiết từng bước giải thích tại sa
                 </button>
                 <button
                   onClick={() => setActiveTab('lab')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 whitespace-nowrap shrink-0 ${
                     activeTab === 'lab' ? 'bg-amber-400 text-black shadow-md' : 'text-white/60 hover:text-white hover:bg-white/5'
                   }`}
                 >
@@ -975,113 +1103,244 @@ Em muốn thầy hướng dẫn chi tiết từng bước giải thích tại sa
                     </button>
                   </div>
 
+                  {/* Category level selectors */}
+                  <div className="flex flex-wrap gap-1.5 bg-white/5 p-1 rounded-xl">
+                    {[
+                      { key: 'all', label: 'Tất cả 20 câu', count: currentLessonQuizzes.length },
+                      { key: 'easy', label: 'Dễ (Nhận biết)', count: currentLessonQuizzes.filter(q => { const i = parseInt(q.id.split('-q')[1] || '1', 10); return i <= 5; }).length },
+                      { key: 'medium', label: 'Trung bình (Thông hiểu)', count: currentLessonQuizzes.filter(q => { const i = parseInt(q.id.split('-q')[1] || '1', 10); return i >= 6 && i <= 12; }).length },
+                      { key: 'hard', label: 'Khó (Vận dụng)', count: currentLessonQuizzes.filter(q => { const i = parseInt(q.id.split('-q')[1] || '1', 10); return i >= 13 && i <= 17; }).length },
+                      { key: 'extreme', label: 'Cực khó (Vận dụng cao)', count: currentLessonQuizzes.filter(q => { const i = parseInt(q.id.split('-q')[1] || '1', 10); return i >= 18; }).length }
+                    ].map(f => (
+                      <button
+                        key={f.key}
+                        onClick={() => setActiveQuizFilter(f.key as any)}
+                        className={`flex-grow md:flex-grow-0 text-[10px] sm:text-[11px] font-bold px-3 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                          activeQuizFilter === f.key
+                            ? 'bg-amber-400 text-black shadow-md'
+                            : 'hover:bg-white/5 text-white/50 hover:text-white'
+                        }`}
+                      >
+                        {f.label}
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
+                          activeQuizFilter === f.key ? 'bg-black/15 text-black' : 'bg-white/10 text-white/60'
+                        }`}>
+                          {f.count}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
                   <div className="space-y-6">
-                    {currentLesson.quizzes.map((q, idx) => {
-                      const ansState = quizResults[q.id];
-                      const diffMatch = q.questionText.match(/^\[(.*?)(?:—\s*(.*?))?\]/);
-                      const difficulty = diffMatch ? diffMatch[1].trim() + (diffMatch[2] ? ` • ${diffMatch[2].trim()}` : '') : '';
-                      const displayQuestionText = diffMatch ? q.questionText.replace(/^\[.*?\]\s*/, '') : q.questionText;
+                    {filteredQuizzes.length === 0 ? (
+                      <div className="text-center py-8 text-white/45 text-xs font-mono">
+                        Không tìm thấy bài tập nào cho cấp độ này.
+                      </div>
+                    ) : (
+                      filteredQuizzes.map((q, idx) => {
+                        const ansState = quizResults[q.id];
+                        const diffMatch = q.questionText.match(/^\[(.*?)(?:—\s*(.*?))?\]/);
+                        const difficulty = diffMatch ? diffMatch[1].trim() + (diffMatch[2] ? ` • ${diffMatch[2].trim()}` : '') : '';
+                        const displayQuestionText = diffMatch ? q.questionText.replace(/^\[.*?\]\s*/, '') : q.questionText;
 
-                      let diffBadgeStyle = 'bg-white/10 text-white/70 border border-white/10';
-                      if (q.questionText.includes('Nhận biết') || q.questionText.includes('Dễ')) {
-                        diffBadgeStyle = 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
-                      } else if (q.questionText.includes('Thông hiểu') || q.questionText.includes('Trung bình')) {
-                        diffBadgeStyle = 'bg-sky-500/15 text-sky-400 border border-sky-500/30';
-                      } else if (q.questionText.includes('Vận dụng cao') || q.questionText.includes('Cực khó')) {
-                        diffBadgeStyle = 'bg-rose-500/15 text-rose-400 border border-rose-500/30';
-                      } else if (q.questionText.includes('Vận dụng') || q.questionText.includes('Khó')) {
-                        diffBadgeStyle = 'bg-amber-500/15 text-amber-450 text-amber-300 border border-amber-500/30';
-                      }
+                        const parts = q.id.split('-q');
+                        const realIdx = parseInt(parts[parts.length - 1] || '1', 10);
 
-                      return (
-                        <div key={q.id} className="border border-white/10 rounded-xl p-5 space-y-4 shadow-lg bg-white/5 transition hover:bg-white/[0.07]">
-                          <div className="flex flex-wrap items-center gap-1.5 border-b border-white/5 pb-2.5">
-                            <span className="bg-amber-400 text-black text-[10px] px-2.5 py-0.5 rounded-md font-mono font-black uppercase tracking-wider shrink-0">Câu {idx + 1}</span>
-                            {difficulty && (
-                              <span className={`text-[9px] px-2.5 py-0.5 rounded-md font-bold uppercase tracking-widest ${diffBadgeStyle}`}>
-                                {difficulty}
-                              </span>
-                            )}
-                          </div>
-
-                          <h4 className="font-semibold text-sm text-white leading-relaxed pl-0">
-                            <MathRenderer text={displayQuestionText} />
-                          </h4>
-
-                          {q.options ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-0 md:pl-8">
-                              {q.options.map((opt) => {
-                                const isSelected = quizAnswers[q.id] === opt;
-                                return (
-                                  <button
-                                    key={opt}
-                                    onClick={() => handleAnswerSelect(q.id, opt)}
-                                    disabled={ansState?.showDetail}
-                                    className={`p-3 text-left rounded-xl text-xs font-semibold transition-all flex items-center justify-between border ${
-                                      isSelected 
-                                      ? 'bg-amber-400/15 border-amber-400 text-amber-400 ring-2 ring-amber-400/30 shadow-md'
-                                      : 'bg-[#17171f] hover:bg-white/5 text-white/70 border-white/10'
-                                    } ${ansState?.showDetail ? 'opacity-85 pointer-events-none' : ''}`}
-                                  >
-                                    <MathRenderer text={opt} />
-                                  </button>
-                                );
-                              })}
+                        // Define highly distinctive, gorgeous segment headers at category thresholds
+                        // to prevent device layer rendering / scrolling screenshot stitching gaps
+                        let sectionDivider = null;
+                        if ((activeQuizFilter === 'all' || activeQuizFilter === 'easy') && realIdx === 1) {
+                          sectionDivider = (
+                            <div className="bg-gradient-to-r from-emerald-500/10 to-transparent border-l-4 border-emerald-500 p-4 rounded-r-xl mb-4 flex items-center gap-3.5 shadow-sm">
+                              <div className="bg-emerald-500/20 p-2 rounded-lg text-emerald-400">
+                                <Award className="w-5 h-5 shrink-0" />
+                              </div>
+                              <div>
+                                <h3 className="text-xs font-bold font-sans uppercase tracking-wider text-emerald-400">Luyện tập: Nhận biết — Dễ (Câu 1 - 5)</h3>
+                                <p className="text-[10.5px] text-emerald-300/70 mt-0.5">Kiến thức nền tảng, định nghĩa trọng tâm và công thức cơ bản.</p>
+                              </div>
                             </div>
-                          ) : (
-                            <div className="pl-8">
-                              <input 
-                                type="text"
-                                placeholder="Hãy điền giá trị kết quả của em..."
-                                value={quizAnswers[q.id] || ''}
-                                onChange={(e) => handleAnswerSelect(q.id, e.target.value)}
-                                disabled={ansState?.showDetail}
-                                className="bg-black/30 border border-white/10 text-white placeholder-white/30 rounded-xl p-2.5 text-xs w-full max-w-xs focus:ring-2 focus:ring-amber-400/50 outline-none"
-                              />
+                          );
+                        } else if ((activeQuizFilter === 'all' || activeQuizFilter === 'medium') && realIdx === 6) {
+                          sectionDivider = (
+                            <div className="bg-gradient-to-r from-sky-500/10 to-transparent border-l-4 border-sky-500 p-4 rounded-r-xl mb-4 mt-8 flex items-center gap-3.5 shadow-sm">
+                              <div className="bg-sky-500/20 p-2 rounded-lg text-sky-400">
+                                <Compass className="w-5 h-5 shrink-0" />
+                              </div>
+                              <div>
+                                <h3 className="text-xs font-bold font-sans uppercase tracking-wider text-sky-400">Luyện tập: Thông hiểu — Trung bình (Câu 6 - 12)</h3>
+                                <p className="text-[10.5px] text-sky-300/70 mt-0.5">Hiểu rõ bản chất toán học, rèn luyện kỹ năng tính toán và biến đổi thành thạo.</p>
+                              </div>
                             </div>
-                          )}
+                          );
+                        } else if ((activeQuizFilter === 'all' || activeQuizFilter === 'hard') && realIdx === 13) {
+                          sectionDivider = (
+                            <div className="bg-gradient-to-r from-amber-500/10 to-transparent border-l-4 border-amber-500 p-4 rounded-r-xl mb-4 mt-8 flex items-center gap-3.5 shadow-sm">
+                              <div className="bg-amber-500/20 p-2 rounded-lg text-amber-400">
+                                <TrendingUp className="w-5 h-5 shrink-0" />
+                              </div>
+                              <div>
+                                <h3 className="text-xs font-bold font-sans uppercase tracking-wider text-amber-400">Luyện tập: Vận dụng — Khó (Câu 13 - 17)</h3>
+                                <p className="text-[10.5px] text-amber-300/70 mt-0.5">Tích hợp liên kết kiến thức, tư duy phán đoán lý luận đa chiều.</p>
+                              </div>
+                            </div>
+                          );
+                        } else if ((activeQuizFilter === 'all' || activeQuizFilter === 'extreme') && realIdx === 18) {
+                          sectionDivider = (
+                            <div className="bg-gradient-to-r from-rose-500/10 to-transparent border-l-4 border-rose-500 p-4 rounded-r-xl mb-4 mt-8 flex items-center gap-3.5 shadow-sm">
+                              <div className="bg-rose-500/20 p-2 rounded-lg text-rose-450 text-rose-400">
+                                <Sparkles className="w-5 h-5 shrink-0" />
+                              </div>
+                              <div>
+                                <h3 className="text-xs font-bold font-sans uppercase tracking-wider text-rose-400">Luyện tập: Vận dụng cao — Cực khó (Câu 18 - 20)</h3>
+                                <p className="text-[10.5px] text-rose-300/70 mt-0.5">Thử thách đỉnh cao phá vỡ giới hạn, chinh phục mốc điểm 9, 10 tuyệt đối.</p>
+                              </div>
+                            </div>
+                          );
+                        }
 
-                          {/* Action footer for each question */}
-                          <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-t border-white/10 pt-4 pl-0 md:pl-8 gap-3">
-                            <div className="flex items-center gap-2">
-                              {!ansState?.showDetail ? (
-                                <button
-                                  onClick={() => checkAnswer(q)}
-                                  className="bg-amber-400 hover:bg-amber-500 text-black font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all active:scale-95"
-                                >
-                                  Nộp Đáp Án
-                                </button>
+                        // Create custom unique visual anchors at every individual gap to seamlessly prevent
+                        // mobile device long-screenshot stitching algorithm failures/glitches.
+                        let uniqueDelimiter = null;
+                        if (realIdx > 1 && !sectionDivider) {
+                          uniqueDelimiter = (
+                            <div className="relative flex items-center justify-between my-8 select-none pointer-events-none">
+                              {/* Left pattern line */}
+                              <div className="absolute left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent"></div>
+                              
+                              {/* Progress bar line segment indicator to trick optical flow stitchers */}
+                              <div className="relative mx-auto flex items-center gap-2 bg-[#0c0c11] px-5 py-1.5 rounded-full border border-white/12 shadow-xl shadow-black/90">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                                <span className="text-[9.5px] font-bold font-mono text-white/70 tracking-wider">
+                                  BƯỚC PHÂN CẮT QUY TRÌNH • CÂU {realIdx - 1} ĐẾN CÂU {realIdx}
+                                </span>
+                                <span className="text-[8.5px] font-bold font-sans bg-amber-400/20 px-1.5 py-0.2 rounded text-amber-300">
+                                  POINT {realIdx.toString().padStart(2, '0')}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        let diffBadgeStyle = 'bg-white/10 text-white/70 border border-white/10';
+                        if (q.questionText.includes('Nhận biết') || q.questionText.includes('Dễ')) {
+                          diffBadgeStyle = 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
+                        } else if (q.questionText.includes('Thông hiểu') || q.questionText.includes('Trung bình')) {
+                          diffBadgeStyle = 'bg-sky-500/15 text-sky-400 border border-sky-500/30';
+                        } else if (q.questionText.includes('Vận dụng cao') || q.questionText.includes('Cực khó')) {
+                          diffBadgeStyle = 'bg-rose-500/15 text-rose-400 border border-rose-500/30';
+                        } else if (q.questionText.includes('Vận dụng') || q.questionText.includes('Khó')) {
+                          diffBadgeStyle = 'bg-amber-500/15 text-amber-450 text-amber-300 border border-amber-500/30';
+                        }
+
+                        return (
+                          <React.Fragment key={q.id}>
+                            {uniqueDelimiter}
+                            {sectionDivider}
+                            <div className="relative overflow-hidden border border-white/10 rounded-xl p-5 space-y-4 shadow-lg bg-white/5 transition hover:bg-white/[0.07]">
+                              {/* Absolute background watermarks specifically positioned to provide strong, unique pixel patterns */}
+                              {/* for long-screenshot stitching tools, making each question card visually asymmetric and distinct */}
+                              <div className="absolute right-3.5 top-3.5 text-[54px] font-black font-mono text-white/[0.015] select-none pointer-events-none tracking-tighter leading-none">
+                                Q{realIdx.toString().padStart(2, '0')}
+                              </div>
+                              <div className="absolute right-12 bottom-2 text-xs font-serif italic text-white/[0.01] select-none pointer-events-none">
+                                Math8Pro-NềnTảngHọcTậpCáNhânHóa-Câu{realIdx}
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2 border-b border-white/5 pb-2.5">
+                                <span className="bg-amber-400 text-black text-[10px] px-2.5 py-0.5 rounded-md font-mono font-black uppercase tracking-wider shrink-0">Câu {realIdx}</span>
+                                {difficulty && (
+                                  <span className={`text-[9px] px-2.5 py-0.5 rounded-md font-bold uppercase tracking-widest ${diffBadgeStyle}`}>
+                                    {difficulty}
+                                  </span>
+                                )}
+                                <span className="ml-auto font-mono text-[9px] text-white/15 uppercase tracking-widest hidden sm:inline select-none">
+                                  REF: #{q.id}
+                                </span>
+                              </div>
+
+                              <h4 className="font-semibold text-sm text-white leading-relaxed pl-0 relative z-10">
+                                <MathRenderer text={displayQuestionText} />
+                              </h4>
+
+                              {q.options ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-0 md:pl-8 relative z-10">
+                                  {q.options.map((opt, optIdx) => {
+                                    const isSelected = quizAnswers[q.id] === opt;
+                                    return (
+                                      <button
+                                        key={`${opt}-${optIdx}`}
+                                        onClick={() => handleAnswerSelect(q.id, opt)}
+                                        disabled={ansState?.showDetail}
+                                        className={`p-3 text-left rounded-xl text-xs font-semibold transition-all flex items-center justify-between border ${
+                                          isSelected 
+                                          ? 'bg-amber-400/15 border-amber-400 text-amber-400 ring-2 ring-amber-400/30 shadow-md'
+                                          : 'bg-[#17171f] hover:bg-white/5 text-white/70 border-white/10'
+                                        } ${ansState?.showDetail ? 'opacity-85 pointer-events-none' : ''}`}
+                                      >
+                                        <MathRenderer text={opt} />
+                                      </button>
+                                    );
+                                  })}
+                                </div>
                               ) : (
-                                <div className="flex items-center gap-1.5 text-xs font-bold">
-                                  {ansState.isCorrect ? (
-                                    <span className="text-emerald-400 flex items-center gap-1.5"><CheckCircle className="w-4 h-4 fill-emerald-950/40 text-emerald-400" /> Đúng rồi, giỏi quá!</span>
+                                <div className="pl-8 relative z-10">
+                                  <input 
+                                    type="text"
+                                    placeholder="Hãy điền giá trị kết quả của em..."
+                                    value={quizAnswers[q.id] || ''}
+                                    onChange={(e) => handleAnswerSelect(q.id, e.target.value)}
+                                    disabled={ansState?.showDetail}
+                                    className="bg-black/30 border border-white/10 text-white placeholder-white/30 rounded-xl p-2.5 text-xs w-full max-w-xs focus:ring-2 focus:ring-amber-400/50 outline-none"
+                                  />
+                                </div>
+                              )}
+
+                              {/* Action footer for each question */}
+                              <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-t border-white/10 pt-4 pl-0 md:pl-8 gap-3 relative z-10">
+                                <div className="flex items-center gap-2">
+                                  {!ansState?.showDetail ? (
+                                    <button
+                                      onClick={() => checkAnswer(q)}
+                                      className="bg-amber-400 hover:bg-amber-500 text-black font-extrabold text-[11px] px-4 py-2.5 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5 shrink-0"
+                                    >
+                                      <span>Nộp Đáp Án Câu {realIdx}</span>
+                                      <span className="text-[9px] bg-black/15 px-1 rounded">Q{realIdx}</span>
+                                    </button>
                                   ) : (
-                                    <span className="text-rose-400 flex items-center gap-1.5"><XCircle className="w-4 h-4 fill-rose-950/40 text-rose-400" /> Chưa chính xác em ơi.</span>
+                                    <div className="flex items-center gap-1.5 text-xs font-bold">
+                                      {ansState.isCorrect ? (
+                                        <span className="text-emerald-400 flex items-center gap-1.5"><CheckCircle className="w-4 h-4 fill-emerald-950/40 text-emerald-400" /> Đúng rồi, giỏi quá!</span>
+                                      ) : (
+                                        <span className="text-rose-400 flex items-center gap-1.5"><XCircle className="w-4 h-4 fill-rose-950/40 text-rose-400" /> Chưa chính xác em ơi.</span>
+                                      )}
+                                    </div>
                                   )}
+                                </div>
+
+                                <button 
+                                  onClick={() => askTeacherAboutQuestion(q)}
+                                  className="text-[11px] font-bold text-amber-400 bg-amber-400/10 border border-amber-400/20 hover:bg-amber-400/20 px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all shrink-0 md:shrink"
+                                >
+                                  <Sparkles className="w-3 h-3 fill-current" />
+                                  <span>Hỏi Thầy Hải giải Câu {realIdx}</span>
+                                </button>
+                              </div>
+
+                              {/* Explanation summary if submitted */}
+                              {ansState?.showDetail && (
+                                <div className="pl-0 md:pl-8 mt-2 bg-black/20 border border-white/5 p-3.5 rounded-xl relative z-10">
+                                  <span className="block text-[9px] font-bold text-amber-400/85 uppercase font-mono mb-1 tracking-wider">giải thích sư phạm</span>
+                                  <div className="text-xs text-white/70 leading-relaxed">
+                                    <MathRenderer text={q.explanation} />
+                                  </div>
                                 </div>
                               )}
                             </div>
-
-                            <button 
-                              onClick={() => askTeacherAboutQuestion(q)}
-                              className="text-xs font-bold text-amber-400 bg-amber-400/10 border border-amber-400/20 hover:bg-amber-400/20 px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all"
-                            >
-                              <Sparkles className="w-3.5 h-3.5 fill-current" /> Nhờ Thầy Hải AI hướng dẫn giải
-                            </button>
-                          </div>
-
-                          {/* Explanation summary if submitted */}
-                          {ansState?.showDetail && (
-                            <div className="pl-0 md:pl-8 mt-2 bg-black/20 border border-white/5 p-3.5 rounded-xl">
-                              <span className="block text-[9px] font-bold text-amber-400/85 uppercase font-mono mb-1 tracking-wider">giải thích sư phạm</span>
-                              <div className="text-xs text-white/70 leading-relaxed">
-                                <MathRenderer text={q.explanation} />
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                        </React.Fragment>
                       );
-                    })}
+                    })
+                    )}
                   </div>
                 </div>
               )}
@@ -1637,159 +1896,540 @@ Em muốn thầy hướng dẫn chi tiết từng bước giải thích tại sa
                     </div>
                   )}
 
-                  {/* CHƯƠNG 7: PHƯƠNG TRÌNH BẬC NHẤT */}
+                  {/* CHƯƠNG 7: PHƯƠNG TRÌNH & HÀM SỐ BẬC NHẤT */}
                   {activeChapterId === 'ch7' && (
-                    <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-5 shadow-xl">
-                      <div className="flex items-center gap-2 border-b border-white/10 pb-3">
-                        <Calculator className="w-5 h-5 text-amber-400" />
-                        <div>
-                          <h3 className="font-serif italic text-base text-white">Thí Nghiệm: Máy Giải Phương Trình Bậc Nhất Một Ẩn</h3>
-                          <p className="text-xs text-white/50">Giải phương trình dạng ax + b = 0 theo quy tắc chuyển vế và nhân.</p>
-                        </div>
-                      </div>
+                    <>
+                      {/* Lọc Thí nghiệm tùy theo bài học hiện tại: Phương trình vs Hàm số */}
+                      {(activeLessonId === 'pt-bac-nhat' || activeLessonId === 'pt-giai-toan') ? (
+                        <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-5 shadow-xl">
+                          <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+                            <Calculator className="w-5 h-5 text-amber-400" />
+                            <div>
+                              <h3 className="font-serif italic text-base text-white">Thí Nghiệm: Máy Giải Phương Trình Bậc Nhất Một Ẩn</h3>
+                              <p className="text-xs text-white/50">Giải phương trình dạng ax + b = 0 theo quy tắc chuyển vế và nhân.</p>
+                            </div>
+                          </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[10px] uppercase tracking-wider font-bold text-white/60 mb-1.5">Hệ số a (VD: 3):</label>
-                          <input 
-                            type="number" 
-                            value={eqA} 
-                            onChange={(e) => setEqA(Number(e.target.value))}
-                            className="bg-black/30 border border-white/10 rounded-xl p-2.5 text-xs w-full text-white font-mono font-bold"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] uppercase tracking-wider font-bold text-white/60 mb-1.5">Hệ số b (VD: -12):</label>
-                          <input 
-                            type="number" 
-                            value={eqB} 
-                            onChange={(e) => setEqB(Number(e.target.value))}
-                            className="bg-black/30 border border-white/10 rounded-xl p-2.5 text-xs w-full text-white font-mono font-bold"
-                          />
-                        </div>
-                      </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-[10px] uppercase tracking-wider font-bold text-white/60 mb-1.5">Hệ số a (VD: 3):</label>
+                              <input 
+                                type="number" 
+                                value={eqA} 
+                                onChange={(e) => setEqA(Number(e.target.value))}
+                                className="bg-black/30 border border-white/10 rounded-xl p-2.5 text-xs w-full text-white font-mono font-bold"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] uppercase tracking-wider font-bold text-white/60 mb-1.5">Hệ số b (VD: -12):</label>
+                              <input 
+                                type="number" 
+                                value={eqB} 
+                                onChange={(e) => setEqB(Number(e.target.value))}
+                                className="bg-black/30 border border-white/10 rounded-xl p-2.5 text-xs w-full text-white font-mono font-bold"
+                              />
+                            </div>
+                          </div>
 
-                      <div className="bg-[#17171f] border border-white/10 rounded-xl p-4 space-y-3 font-mono text-xs">
-                        <span className="text-[10px] font-bold uppercase font-sans text-white/40 tracking-wider">Phương trình khảo nghiệm:</span>
-                        <div className="text-sm font-extrabold text-amber-400">
-                          {eqA}x {eqB >= 0 ? `+ ${eqB}` : `- ${Math.abs(eqB)}`} = 0
-                        </div>
-                        
-                        <div className="mt-3 pt-3 border-t border-white/5 space-y-2 text-white/70">
-                          <p className="font-semibold font-sans text-white/90">Các bước biến đổi cụ thể:</p>
-                          <div className="bg-black/30 p-3 rounded-lg space-y-2">
-                            <p>• Bước 1: Áp dụng quy tắc chuyển hạng tử tự do b sang vế phải:</p>
-                            <p className="font-bold text-amber-300">{"=>"} {eqA}x = {-eqB}</p>
+                          <div className="bg-[#17171f] border border-white/10 rounded-xl p-4 space-y-3 font-mono text-xs">
+                            <span className="text-[10px] font-bold uppercase font-sans text-white/40 tracking-wider">Phương trình khảo nghiệm:</span>
+                            <div className="text-sm font-extrabold text-amber-400">
+                              {eqA}x {eqB >= 0 ? `+ ${eqB}` : `- ${Math.abs(eqB)}`} = 0
+                            </div>
                             
-                            <p>• Bước 2: Chia hai vế cho hệ số góc a để thu được x:</p>
-                            {eqA === 0 ? (
-                              eqB === 0 ? (
-                                <p className="text-emerald-400 font-extrabold font-sans">{"=>"} 0x = 0: Phương trình VÔ SỐ NGHIỆM (mọi số thực x đều thỏa mãn).</p>
-                              ) : (
-                                <p className="text-rose-400 font-extrabold font-sans">{"=>"} 0x = {-eqB} (vô lý): Phương trình VÔ NGHIỆM.</p>
-                              )
-                            ) : (
-                              <div>
-                                <p>{"=>"} x = {-eqB} / {eqA}</p>
-                                <p className="text-amber-400 font-extrabold font-sans">{"=>"} Tập nghiệm S = &#x7b; {(-eqB / eqA).toFixed(2)} &#x7d;</p>
+                            <div className="mt-3 pt-3 border-t border-white/5 space-y-2 text-white/70">
+                              <p className="font-semibold font-sans text-white/90">Các bước biến đổi cụ thể:</p>
+                              <div className="bg-black/30 p-3 rounded-lg space-y-2">
+                                <p>• Bước 1: Áp dụng quy tắc chuyển hạng tử tự do b sang vế phải:</p>
+                                <p className="font-bold text-amber-300">{"=>"} {eqA}x = {-eqB}</p>
+                                
+                                <p>• Bước 2: Chia hai vế cho hệ số góc a để thu được x:</p>
+                                {eqA === 0 ? (
+                                  eqB === 0 ? (
+                                    <p className="text-emerald-400 font-extrabold font-sans">{"=>"} 0x = 0: Phương trình VÔ SỐ NGHIỆM (mọi số thực x đều thỏa mãn).</p>
+                                  ) : (
+                                    <p className="text-rose-400 font-extrabold font-sans">{"=>"} 0x = {-eqB} (vô lý): Phương trình VÔ NGHIỆM.</p>
+                                  )
+                                ) : (
+                                  <div>
+                                    <p>{"=>"} x = {-eqB} / {eqA}</p>
+                                    <p className="text-amber-400 font-extrabold font-sans">{"=>"} Tập nghiệm S = &#x7b; {(-eqB / eqA).toFixed(2)} &#x7d;</p>
+                                  </div>
+                                )}
                               </div>
-                            )}
+                            </div>
+                          </div>
+
+                          <div className="flex justify-end">
+                            <button
+                              onClick={() => {
+                                askPreconfiguredQuestion(`Thầy Hải ơi! Thầy hãy giải thích cho em quy tắc chuyển vế và quy tắc nhân để giải phương trình bậc nhất, và hướng dẫn giải phương trình ${eqA}x ${eqB >= 0 ? `+ ${eqB}` : `- ${Math.abs(eqB)}`} = 0 này với ạ!`);
+                              }}
+                              className="text-xs text-black bg-amber-400 hover:bg-amber-500 font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition active:scale-95 shadow-md"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 fill-current" /> Gửi nhờ Thầy Hải hướng dẫn lập tức
+                            </button>
                           </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-5 shadow-xl">
+                          <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+                            <Grid className="w-5 h-5 text-amber-400" />
+                            <div>
+                              <h3 className="font-serif italic text-base text-white">Thí Nghiệm 3: Trực Quan Hóa Đồ Thị Đường Thẳng y = ax + b</h3>
+                              <p className="text-xs text-white/50">Thay đổi các hệ số a (hệ số góc) và b (tung độ gốc) để vẽ biểu đồ và tìm tính đồng biến/nghịch biến.</p>
+                            </div>
+                          </div>
 
-                      <div className="flex justify-end">
-                        <button
-                          onClick={() => {
-                            askPreconfiguredQuestion(`Thầy Hải ơi! Thầy hãy giải thích cho em quy tắc chuyển vế và quy tắc nhân để giải phương trình bậc nhất, và hướng dẫn giải phương trình ${eqA}x ${eqB >= 0 ? `+ ${eqB}` : `- ${Math.abs(eqB)}`} = 0 này với ạ!`);
-                          }}
-                          className="text-xs text-black bg-amber-400 hover:bg-amber-500 font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition active:scale-95 shadow-md"
-                        >
-                          <Sparkles className="w-3.5 h-3.5 fill-current" /> Gửi nhờ Thầy Hải hướng dẫn lập tức
-                        </button>
-                      </div>
-                    </div>
+                          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                            {/* Param Controls */}
+                            <div className="lg:col-span-5 space-y-4">
+                              <div className="bg-[#17171f] p-4 border border-white/10 rounded-xl space-y-3">
+                                <span className="block text-[10px] font-bold uppercase text-white/45 tracking-wider">Công thức hàm số:</span>
+                                <div className="bg-black/35 px-3 py-2 border border-white/5 rounded-lg font-mono text-center text-sm font-extrabold text-amber-400">
+                                  y = {slopeA}x {yInterceptB >= 0 ? `+ ${yInterceptB}` : `- ${Math.abs(yInterceptB)}`}
+                                </div>
+                                
+                                <div className="space-y-1">
+                                  <div className="flex justify-between text-xs text-white/80 font-semibold">
+                                    <span>Hệ số góc a: {slopeA}</span>
+                                    <span className={slopeA > 0 ? "text-emerald-400 font-bold" : slopeA < 0 ? "text-rose-400 font-bold" : "text-amber-400 font-bold"}>
+                                      {slopeA > 0 ? 'Đồng biến' : slopeA < 0 ? 'Nghịch biến' : 'Hàm hằng'}
+                                    </span>
+                                  </div>
+                                  <input 
+                                    type="range" 
+                                    min="-5" 
+                                    max="5" 
+                                    step="1" 
+                                    value={slopeA}
+                                    onChange={(e) => setSlopeA(Number(e.target.value) || 1)} // prevent zero
+                                    className="w-full accent-amber-400 cursor-pointer"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <div className="flex justify-between text-xs text-white/80 font-semibold">
+                                    <span>Tung độ gốc b (Giao Oy): {yInterceptB}</span>
+                                  </div>
+                                  <input 
+                                    type="range" 
+                                    min="-6" 
+                                    max="6" 
+                                    step="1" 
+                                    value={yInterceptB}
+                                    onChange={(e) => setYInterceptB(Number(e.target.value))}
+                                    className="w-full accent-amber-400 cursor-pointer"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="bg-white/5 border border-white/5 p-3.5 rounded-xl text-xs text-white/70 space-y-1.5 font-mono">
+                                <p className="font-sans font-bold text-amber-400">📌 Điểm cắt tọa độ giải tích:</p>
+                                <p>• Điểm cắt Oy: <span className="font-bold text-amber-400">A(0; {yInterceptB})</span></p>
+                                <p>• Điểm cắt Ox: <span className="font-bold text-blue-400">
+                                  {slopeA !== 0 ? `B(${(-yInterceptB / slopeA).toFixed(2)}; 0)` : "Không cắt Ox (song song trục Ox)"}
+                                </span></p>
+                              </div>
+                            </div>
+
+                            {/* Interactive SVG Graph */}
+                            <div className="lg:col-span-7 flex flex-col justify-center">
+                              {renderSVGGraph()}
+                            </div>
+                          </div>
+
+                          <div className="flex justify-end">
+                            <button
+                              onClick={() => {
+                                askPreconfiguredQuestion(`Thầy Hải ơi! Thầy giảng giải giúp em cách vẽ chi tiết đồ thị hàm số bậc nhất y = ${slopeA}x ${yInterceptB >= 0 ? `+ ${yInterceptB}` : `- ${Math.abs(yInterceptB)}`} và tại sao hệ số góc a = ${slopeA} lại chứng tỏ hàm số này ${slopeA > 0 ? 'đồng biến' : 'nghịch biến'} với ạ?`);
+                              }}
+                              className="text-xs text-black bg-amber-400 hover:bg-amber-500 font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition active:scale-95 shadow-md"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 fill-current" /> Gửi đồ thị nhờ Thầy giảng giải
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
 
-                  {/* CHƯƠNG 8: HÀM SỐ VÀ ĐỒ THỊ */}
+                  {/* CHƯƠNG 8: MỞ ĐẦU VỀ TÍNH XÁC SUẤT CỦA BIẾN CỐ */}
                   {activeChapterId === 'ch8' && (
                     <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-5 shadow-xl">
-                      <div className="flex items-center gap-2 border-b border-white/10 pb-3">
-                        <Grid className="w-5 h-5 text-amber-400" />
-                        <div>
-                          <h3 className="font-serif italic text-base text-white">Thí Nghiệm 3: Trực Quan Hóa Đồ Thị Đường Thẳng y = ax + b</h3>
-                          <p className="text-xs text-white/50">Thay đổi các hệ số a (hệ số góc) và b (tung độ gốc) để vẽ biểu đồ và tìm tính đồng biến/nghịch biến.</p>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
+                        <div className="flex items-center gap-2">
+                          <TrendingUp className="w-5 h-5 text-amber-400" />
+                          <div>
+                            <h3 className="font-serif italic text-base text-white">Thí Nghiệm: Khảo Nghiệm Xác Suất Thực Nghiệm</h3>
+                            <p className="text-xs text-white/50">Mô phỏng phép thử ngẫu nhiên đồng xu và xúc xắc để đối chiếu xác suất thực tế với lý thuyết.</p>
+                          </div>
                         </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
                         
-                        {/* Param Controls */}
-                        <div className="md:col-span-5 space-y-4">
-                          <div className="bg-[#17171f] p-4 border border-white/10 rounded-xl space-y-3">
-                            <span className="block text-[10px] font-bold uppercase text-white/45 tracking-wider">Công thức hàm số:</span>
-                            <div className="bg-black/35 px-3 py-2 border border-white/5 rounded-lg font-mono text-center text-sm font-extrabold text-amber-400">
-                              y = {slopeA}x {yInterceptB >= 0 ? `+ ${yInterceptB}` : `- ${Math.abs(yInterceptB)}`}
-                            </div>
-                            
-                            <div className="space-y-1">
-                              <div className="flex justify-between text-xs text-white/80 font-semibold">
-                                <span>Hệ số góc a: {slopeA}</span>
-                                <span className={slopeA > 0 ? "text-emerald-400 font-bold" : slopeA < 0 ? "text-rose-400 font-bold" : "text-amber-400 font-bold"}>
-                                  {slopeA > 0 ? 'Đồng biến' : slopeA < 0 ? 'Nghịch biến' : 'Hàm hằng'}
-                                </span>
-                              </div>
-                              <input 
-                                type="range" 
-                                min="-5" 
-                                max="5" 
-                                step="1" 
-                                value={slopeA}
-                                onChange={(e) => setSlopeA(Number(e.target.value) || 1)} // prevent zero
-                                className="w-full accent-amber-400 cursor-pointer"
-                              />
-                            </div>
-
-                            <div className="space-y-1">
-                              <div className="flex justify-between text-xs text-white/80 font-semibold">
-                                <span>Tung độ gốc b (Giao Oy): {yInterceptB}</span>
-                              </div>
-                              <input 
-                                type="range" 
-                                min="-6" 
-                                max="6" 
-                                step="1" 
-                                value={yInterceptB}
-                                onChange={(e) => setYInterceptB(Number(e.target.value))}
-                                className="w-full accent-amber-400 cursor-pointer"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="bg-white/5 border border-white/5 p-3.5 rounded-xl text-xs text-white/70 space-y-1.5 font-mono">
-                            <p className="font-sans font-bold text-amber-400">📌 Điểm cắt tọa độ giải tích:</p>
-                            <p>• Điểm cắt Oy: <span className="font-bold text-amber-400">A(0; {yInterceptB})</span></p>
-                            <p>• Điểm cắt Ox: <span className="font-bold text-blue-400">
-                              {slopeA !== 0 ? `B(${(-yInterceptB / slopeA).toFixed(2)}; 0)` : "Không cắt Ox (song song trục Ox)"}
-                            </span></p>
-                          </div>
+                        {/* Sub-tab selection */}
+                        <div className="flex gap-1.5 bg-black/40 border border-white/10 p-1 rounded-xl self-start sm:self-auto">
+                          <button
+                            onClick={() => setProbTab('coin')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                              probTab === 'coin' ? 'bg-amber-400 text-black shadow-md' : 'text-white/60 hover:text-white'
+                            }`}
+                          >
+                            🪙 Tung Đồng Xu
+                          </button>
+                          <button
+                            onClick={() => setProbTab('dice')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                              probTab === 'dice' ? 'bg-amber-400 text-black shadow-md' : 'text-white/60 hover:text-white'
+                            }`}
+                          >
+                            🎲 Gieo Xúc Xắc
+                          </button>
                         </div>
-
-                        {/* Interactive SVG Graph */}
-                        <div className="md:col-span-7 flex flex-col justify-center">
-                          {renderSVGGraph()}
-                        </div>
-
                       </div>
 
-                      <div className="flex justify-end">
+                      {probTab === 'coin' ? (
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                          {/* Left Column: Flip Controls */}
+                          <div className="lg:col-span-12 xl:col-span-5 space-y-4">
+                            <div className="bg-[#17171f] p-4 border border-white/10 rounded-xl space-y-3.5">
+                              <span className="block text-[10px] font-bold uppercase text-white/45 tracking-wider">Bảng điều khiển phép thử:</span>
+                              
+                              <div className="flex flex-col gap-2">
+                                <button
+                                  onClick={() => handleFlipCoin(1)}
+                                  disabled={isFlippingCoin}
+                                  className="w-full text-xs text-black bg-amber-400 hover:bg-amber-500 font-bold px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95 disabled:opacity-50"
+                                >
+                                  {isFlippingCoin ? 'Đang tung đồng xu...' : '🪙 Tung Đồng Xu 1 Lần'}
+                                </button>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button
+                                    onClick={() => handleFlipCoin(10)}
+                                    disabled={isFlippingCoin}
+                                    className="text-xs text-white bg-white/10 hover:bg-white/15 font-bold px-3 py-2 rounded-xl transition active:scale-95 text-center"
+                                  >
+                                    ➕ Tung 10 lần
+                                  </button>
+                                  <button
+                                    onClick={() => handleFlipCoin(100)}
+                                    disabled={isFlippingCoin}
+                                    className="text-xs text-white bg-white/10 hover:bg-white/15 font-bold px-3 py-2 rounded-xl transition active:scale-95 text-center"
+                                  >
+                                    ⚡ Tung 100 lần
+                                  </button>
+                                </div>
+                                <button
+                                  onClick={handleResetProb}
+                                  className="w-full text-xs text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/10 py-1.5 rounded-xl transition font-semibold"
+                                >
+                                  Xóa tất cả kết quả
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Coin animation graphic */}
+                            <div className="bg-[#17171f] p-4 border border-white/10 rounded-xl flex flex-col items-center justify-center space-y-3 min-h-[140px]">
+                              <span className="text-[10px] uppercase text-white/40 tracking-wider font-bold">Mô phỏng 3D:</span>
+                              <div 
+                                id="coin-3d-visualizer"
+                                onClick={() => handleFlipCoin(1)}
+                                className={`relative w-20 h-20 rounded-full bg-gradient-to-tr from-amber-600 to-yellow-300 border-4 border-yellow-400 flex items-center justify-center shadow-lg transition-transform duration-500 cursor-pointer ${
+                                  isFlippingCoin ? 'animate-bounce rotate-180 scale-110' : 'hover:scale-105 active:scale-95'
+                                }`}
+                              >
+                                <div className="text-black font-extrabold font-serif text-sm">
+                                  {isFlippingCoin ? '🪙' : latestCoinResult || 'Toán 8'}
+                                </div>
+                              </div>
+                              <p className="text-[11px] text-white/50 text-center font-semibold">
+                                {isFlippingCoin ? 'Đồng xu đang xoay...' : latestCoinResult ? `Kết quả lượt cuối: Mặt ${latestCoinResult}` : 'Click hoặc bấm nút để tung'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Right Column: Statistics */}
+                          <div className="lg:col-span-12 xl:col-span-7 space-y-4">
+                            <div className="bg-[#111116] border border-white/10 rounded-xl p-4.5 space-y-4 font-mono text-xs">
+                              <span className="text-[10px] font-bold uppercase font-sans text-white/40 tracking-wider block border-b border-white/5 pb-2">Số liệu thống kê thực nghiệm:</span>
+                              
+                              <div className="grid grid-cols-3 gap-2.5 text-center">
+                                <div className="bg-black/30 p-2.5 rounded-xl border border-white/5">
+                                  <p className="text-[9px] text-white/40 uppercase font-sans font-bold">Tổng số lần tung</p>
+                                  <p className="text-xl font-bold text-white mt-1">{coinHeadsCount + coinTailsCount}</p>
+                                </div>
+                                <div className="bg-black/30 p-2.5 rounded-xl border border-white/5">
+                                  <p className="text-[9px] text-[#f59e0b] uppercase font-sans font-bold">Mặt SẤP</p>
+                                  <p className="text-xl font-bold text-[#f59e0b] mt-1">{coinHeadsCount}</p>
+                                </div>
+                                <div className="bg-black/30 p-2.5 rounded-xl border border-white/5">
+                                  <p className="text-[9px] text-teal-400 uppercase font-sans font-bold">Mặt NGỬA</p>
+                                  <p className="text-xl font-bold text-teal-400 mt-1">{coinTailsCount}</p>
+                                </div>
+                              </div>
+
+                              {/* Progress Bars for Probabilities */}
+                              <div className="space-y-3 pt-2">
+                                {/* Sấp */}
+                                <div className="space-y-1">
+                                  <div className="flex justify-between text-[11px]">
+                                    <span className="text-[#f59e0b] font-bold">Xác suất thực nghiệm Mặt Sấp:</span>
+                                    <span className="font-bold text-white">
+                                      {coinHeadsCount + coinTailsCount > 0 
+                                        ? `${((coinHeadsCount / (coinHeadsCount + coinTailsCount)) * 100).toFixed(1)}%` 
+                                        : '0%'}
+                                    </span>
+                                  </div>
+                                  <div className="w-full bg-black/40 rounded-full h-2 overflow-hidden border border-white/5">
+                                    <div 
+                                      className="bg-[#f59e0b] h-full transition-all duration-300"
+                                      style={{ width: `${coinHeadsCount + coinTailsCount > 0 ? (coinHeadsCount / (coinHeadsCount + coinTailsCount)) * 100 : 0}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+
+                                {/* Ngửa */}
+                                <div className="space-y-1">
+                                  <div className="flex justify-between text-[11px]">
+                                    <span className="text-teal-400 font-bold">Xác suất thực nghiệm Mặt Ngửa:</span>
+                                    <span className="font-bold text-white">
+                                      {coinTailsCount + coinHeadsCount > 0 
+                                        ? `${((coinTailsCount / (coinHeadsCount + coinTailsCount)) * 100).toFixed(1)}%` 
+                                        : '0%'}
+                                    </span>
+                                  </div>
+                                  <div className="w-full bg-black/40 rounded-full h-2 overflow-hidden border border-white/5">
+                                    <div 
+                                      className="bg-teal-400 h-full transition-all duration-300"
+                                      style={{ width: `${coinHeadsCount + coinTailsCount > 0 ? (coinTailsCount / (coinHeadsCount + coinTailsCount)) * 100 : 0}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+
+                                <div className="p-3 bg-white/5 rounded-xl font-sans text-xs text-white/70 space-y-1">
+                                  <p className="font-bold text-amber-300 mb-1">⚖️ Đối chiếu Xác suất Lý thuyết:</p>
+                                  <p>• Phép thử chỉ có 2 kết quả có thể xảy ra: <span className="font-mono font-bold text-white">Sấp hoặc Ngửa</span>.</p>
+                                  <p>• Xác suất lý thuyết của mỗi mặt luôn là: <span className="font-mono font-bold text-[#f59e0b]">1/2 = 50%</span>.</p>
+                                  <p className="text-[10.5px] italic text-white/50 block mt-1">Khi tổng số lần tung tăng lên lớn, xác suất thực nghiệm của Sấp và Ngửa sẽ tiến càng sát về 50%!</p>
+                                </div>
+
+                                {/* Last flips tracker */}
+                                {coinFlips.length > 0 && (
+                                  <div className="pt-2">
+                                    <span className="text-[9px] uppercase font-bold text-white/40 block mb-1">Dòng hoạt động gần đây (Last 10 results):</span>
+                                    <div className="flex flex-wrap gap-1 bg-black/30 p-2 rounded-lg border border-white/5">
+                                      {coinFlips.slice(0, 10).map((fl, idx) => (
+                                        <span 
+                                          key={idx} 
+                                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                            fl === 'Sấp' ? 'bg-[#f59e0b]/20 text-[#f59e0b] border border-[#f59e0b]/20' : 'bg-teal-400/20 text-teal-400 border border-teal-400/20'
+                                          }`}
+                                        >
+                                          {fl}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        // DICE ROLL TAB
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                          {/* Left Column: Roll Controls */}
+                          <div className="lg:col-span-12 xl:col-span-5 space-y-4 font-sans">
+                            <div className="bg-[#17171f] p-4 border border-white/10 rounded-xl space-y-3.5">
+                              <span className="block text-[10px] font-bold uppercase text-white/45 tracking-wider font-mono">Bảng điều khiển phép thử:</span>
+                              
+                              <div className="flex flex-col gap-2">
+                                <button
+                                  onClick={() => handleRollDice(1)}
+                                  disabled={isRollingDice}
+                                  className="w-full text-xs text-black bg-amber-400 hover:bg-amber-500 font-bold px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95 disabled:opacity-50"
+                                >
+                                  {isRollingDice ? 'Đang gieo xúc xắc...' : '🎲 Gieo Xúc Xắc 1 Lần'}
+                                </button>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button
+                                    onClick={() => handleRollDice(10)}
+                                    disabled={isRollingDice}
+                                    className="text-xs text-white bg-white/10 hover:bg-white/15 font-bold px-3 py-2 rounded-xl transition active:scale-95 text-center font-sans"
+                                  >
+                                    ➕ Gieo 10 lần
+                                  </button>
+                                  <button
+                                    onClick={() => handleRollDice(100)}
+                                    disabled={isRollingDice}
+                                    className="text-xs text-white bg-white/10 hover:bg-white/15 font-bold px-3 py-2 rounded-xl transition active:scale-95 text-center font-sans"
+                                  >
+                                    ⚡ Gieo 100 lần
+                                  </button>
+                                </div>
+                                <button
+                                  onClick={handleResetProb}
+                                  className="w-full text-xs text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/10 py-1.5 rounded-xl transition font-semibold"
+                                >
+                                  Xóa tất cả kết quả
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Dice Options: select an event */}
+                            <div className="bg-[#17171f] p-4 border border-white/10 rounded-xl space-y-3">
+                              <span className="block text-[10px] font-bold uppercase text-white/45 tracking-wider font-mono">2. Chọn Biến cố khảo sát:</span>
+                              <select
+                                value={diceCondition}
+                                onChange={(e) => setDiceCondition(e.target.value as any)}
+                                className="bg-[#111116] border border-white/10 rounded-xl p-2.5 text-xs w-full text-white/95 focus:ring-1 focus:ring-amber-400/50 focus:border-amber-400 outline-none"
+                              >
+                                <option value="any">Chọn bất kỳ mặt nào (Tất cả thuận lợi - 100%)</option>
+                                <option value="odd">Lượt ra mặt LẺ &#x7b;1, 3, 5&#x7d;</option>
+                                <option value="geq3">Lượt ra mặt từ 3 chấm trở lên &#x7b;3, 4, 5, 6&#x7d;</option>
+                                <option value="div3">Lượt ra mặt chia hết cho 3 &#x7b;3, 6&#x7d;</option>
+                              </select>
+
+                              {/* Visualization of favorable outcomes */}
+                              <div className="pt-2">
+                                <span className="block text-[9px] uppercase tracking-wider text-white/40 font-bold mb-1.5 font-mono">Các mặt thuận lợi cho biến cố:</span>
+                                <div className="flex gap-1.5 justify-around bg-black/40 p-2.5 rounded-xl border border-white/5">
+                                  {[1, 2, 3, 4, 5, 6].map((face) => {
+                                    const isFav = 
+                                      diceCondition === 'any' ||
+                                      (diceCondition === 'odd' && face % 2 !== 0) ||
+                                      (diceCondition === 'geq3' && face >= 3) ||
+                                      (diceCondition === 'div3' && face % 3 === 0);
+                                    return (
+                                      <div 
+                                        key={face} 
+                                        className={`w-7 h-7 flex items-center justify-center border rounded-lg text-xs font-mono font-bold transition-all ${
+                                          isFav 
+                                            ? 'bg-amber-400 text-black border-amber-400 font-extrabold shadow-md shadow-amber-400/20 scale-105' 
+                                            : 'text-white/30 border-white/10 bg-black/25'
+                                        }`}
+                                      >
+                                        {face}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Right Column: Dice Statistics */}
+                          <div className="lg:col-span-12 xl:col-span-7 space-y-4 font-mono text-xs">
+                            <div className="bg-[#111116] border border-white/10 rounded-xl p-4.5 space-y-4">
+                              <span className="text-[10px] font-bold uppercase font-sans text-white/40 tracking-wider block border-b border-white/5 pb-2">Số liệu phân phối mặt gieo:</span>
+                              
+                              {/* 1-6 Distribution progress bars */}
+                              <div className="space-y-2 pt-1">
+                                {[1, 2, 3, 4, 5, 6].map((face) => {
+                                  const count = diceCounts[face] || 0;
+                                  const total = diceRolls.length;
+                                  const percent = total > 0 ? (count / total) * 100 : 0;
+                                  const isFav = 
+                                    diceCondition === 'any' ||
+                                    (diceCondition === 'odd' && face % 2 !== 0) ||
+                                    (diceCondition === 'geq3' && face >= 3) ||
+                                    (diceCondition === 'div3' && face % 3 === 0);
+                                  
+                                  return (
+                                    <div key={face} className={`flex items-center gap-3 p-1.5 rounded-lg border transition-all ${
+                                      isFav ? 'bg-amber-400/5 border-amber-400/10' : 'border-transparent'
+                                    }`}>
+                                      <span className={`w-6 h-6 flex items-center justify-center rounded border text-xs font-bold font-mono ${
+                                        isFav ? 'bg-amber-400 text-black border-amber-400' : 'text-white/50 border-white/10 bg-black/30'
+                                      }`}>
+                                        {face}
+                                      </span>
+                                      
+                                      <div className="flex-1 space-y-0.5">
+                                        <div className="flex justify-between text-[10px]">
+                                          <span className="text-white/60 font-sans">Xuất hiện: <span className="font-bold text-white">{count} lần</span></span>
+                                          <span className="font-bold text-white">{percent.toFixed(1)}%</span>
+                                        </div>
+                                        <div className="w-full bg-black/40 rounded-full h-1.5 overflow-hidden border border-white/5">
+                                          <div 
+                                            className={`h-full transition-all duration-300 ${isFav ? 'bg-amber-400' : 'bg-white/30'}`}
+                                            style={{ width: `${percent}%` }}
+                                          ></div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Summary box and comparison */}
+                              {(() => {
+                                const totalRolls = diceRolls.length;
+                                const favMatches = diceRolls.filter((val) => {
+                                  if (diceCondition === 'any') return true;
+                                  if (diceCondition === 'odd') return val % 2 !== 0;
+                                  if (diceCondition === 'geq3') return val >= 3;
+                                  if (diceCondition === 'div3') return val % 3 === 0;
+                                  return false;
+                                });
+                                const favCount = favMatches.length;
+                                const favPercent = totalRolls > 0 ? (favCount / totalRolls) * 100 : 0;
+                                
+                                // Theoretical values
+                                let theoNum = 6;
+                                let theoPr = "6/6 (100%)";
+                                if (diceCondition === 'odd') { theoNum = 3; theoPr = "3/6 (50%)"; }
+                                else if (diceCondition === 'geq3') { theoNum = 4; theoPr = "4/6 (66.7%)"; }
+                                else if (diceCondition === 'div3') { theoNum = 2; theoPr = "2/6 (33.3%)"; }
+
+                                return (
+                                  <div className="p-3 bg-white/5 rounded-xl border border-white/5 font-sans space-y-2 mt-4 font-normal">
+                                    <p className="font-bold text-amber-300 font-sans">📊 Tỷ lệ đối chiếu Xác suất:</p>
+                                    <div className="grid grid-cols-2 gap-3 text-xs pt-1.5 border-t border-white/5 font-mono font-bold">
+                                      <div className="bg-black/30 p-2.5 rounded-lg border border-white/5">
+                                        <p className="text-[10px] text-white/40 uppercase font-sans font-bold">Lý Thuyết</p>
+                                        <p className="text-sm font-bold text-teal-400 mt-1">{theoPr}</p>
+                                        <p className="text-[9px] text-white/50 font-sans mt-0.5 font-normal">({theoNum} KQ thuận lợi)</p>
+                                      </div>
+                                      <div className="bg-amber-400/10 p-2.5 rounded-lg border border-amber-400/20">
+                                        <p className="text-[10px] text-amber-400/80 uppercase font-sans font-bold text-amber-400 font-bold">Thực tế</p>
+                                        <p className="text-sm font-bold text-amber-400 mt-1">{favPercent.toFixed(1)}%</p>
+                                        <p className="text-[9px] text-white/50 font-sans mt-0.5 font-normal">({favCount} / {totalRolls} lần)</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
+                              {/* Recent Rolls Tracker */}
+                              {diceRolls.length > 0 && (
+                                <div className="pt-2">
+                                  <span className="text-[9px] uppercase font-bold text-white/40 block mb-1">Dòng hoạt động gần đây (Last 12 rolls):</span>
+                                  <div className="flex flex-wrap gap-1 bg-black/30 p-2 rounded-lg border border-white/5">
+                                    {diceRolls.slice(0, 12).map((roll, idx) => (
+                                      <span 
+                                        key={idx} 
+                                        className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-white/5 text-white/80 border border-white/5"
+                                      >
+                                        {roll} 🎲
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex justify-end pt-2">
                         <button
                           onClick={() => {
-                            askPreconfiguredQuestion(`Thầy Hải ơi! Thầy giảng giải giúp em cách vẽ chi tiết đồ thị hàm số bậc nhất y = ${slopeA}x ${yInterceptB >= 0 ? `+ ${yInterceptB}` : `- ${Math.abs(yInterceptB)}`} và tại sao hệ số góc a = ${slopeA} lại chứng tỏ hàm số này ${slopeA > 0 ? 'đồng biến' : 'nghịch biến'} với ạ?`);
+                            askPreconfiguredQuestion(`Thầy Hải ơi! Thầy hãy giảng giải giúp em cách tính xác suất của biến cố trong gieo xúc xắc 6 mặt, và sự khác nhau cơ bản giữa Xác suất Lý thuyết với Xác suất Thực nghiệm là gì với ạ!`);
                           }}
-                          className="text-xs text-black bg-amber-400 hover:bg-amber-500 font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition active:scale-95 shadow-md"
+                          className="text-xs text-black bg-amber-400 hover:bg-amber-500 font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition active:scale-95 shadow-md font-sans"
                         >
-                          <Sparkles className="w-3.5 h-3.5 fill-current" /> Gửi đồ thị nhờ Thầy giảng giải
+                          <Sparkles className="w-3.5 h-3.5 fill-current" /> Nhờ Thầy giải thích xác suất
                         </button>
                       </div>
                     </div>
@@ -1890,7 +2530,7 @@ Em muốn thầy hướng dẫn chi tiết từng bước giải thích tại sa
                   )}
 
                   {/* CHƯƠNG 10: HÌNH KHỐI TRONG THỰC TIỄN */}
-                  {activeChapterId === 'ch9-10' && (
+                  {activeChapterId === 'ch10' && (
                     <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-5 shadow-xl">
                       <div className="flex items-center gap-2 border-b border-white/10 pb-3">
                         <Compass className="w-5 h-5 text-amber-400" />

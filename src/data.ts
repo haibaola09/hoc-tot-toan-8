@@ -35,7 +35,7 @@ export const CURRICULUM: Chapter[] = [
             options: [
               '$2x + 3y$',
               '$-5x^2y^3$',
-              '$\frac{x+1}{y}$',
+              '$\\frac{x+1}{y}$',
               '$x^2 - y^2$'
             ],
             correctAnswer: '$-5x^2y^3$',

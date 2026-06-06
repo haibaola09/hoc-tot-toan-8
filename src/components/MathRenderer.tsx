@@ -62,7 +62,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({ text }) => {
             return (
               <span
                 key={index}
-                className="inline-block px-1 font-semibold text-amber-400"
+                className="inline font-semibold text-amber-400 mx-0.5"
                 dangerouslySetInnerHTML={{ __html: html }}
               />
             );
